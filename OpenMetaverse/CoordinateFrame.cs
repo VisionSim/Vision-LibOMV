@@ -1,0 +1,282 @@
+/*
+ * Copyright (c) 2006-2016, openmetaverse.co
+ * All rights reserved.
+ *
+ * - Redistribution and use in source and binary forms, with or without
+ *   modification, are permitted provided that the following conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright notice, this
+ *   list of conditions and the following disclaimer.
+ * - Neither the name of the openmetaverse.co nor the names
+ *   of its contributors may be used to endorse or promote products derived from
+ *   this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+using System;
+
+namespace OpenMetaverse
+{
+    public class CoordinateFrame
+    {
+        public static readonly Vector3 X_AXIS = new Vector3(1f, 0f, 0f);
+        public static readonly Vector3 Y_AXIS = new Vector3(0f, 1f, 0f);
+        public static readonly Vector3 Z_AXIS = new Vector3(0f, 0f, 1f);
+
+        /// <summary>Origin position of this coordinate frame</summary>
+        public Vector3 Origin
+        {
+            get { return m_origin; }
+            set
+            {
+                if (!value.IsFinite())
+                    throw new ArgumentException("Non-finite in CoordinateFrame.Origin assignment");
+                m_origin = value;
+            }
+        }
+        /// <summary>X axis of this coordinate frame, or Forward/At in grid terms</summary>
+        public Vector3 XAxis
+        {
+            get { return m_xAxis; }
+            set
+            {
+                if (!value.IsFinite())
+                    throw new ArgumentException("Non-finite in CoordinateFrame.XAxis assignment");
+                m_xAxis = value;
+            }
+        }
+        /// <summary>Y axis of this coordinate frame, or Left in grid terms</summary>
+        public Vector3 YAxis
+        {
+            get { return m_yAxis; }
+            set
+            {
+                if (!value.IsFinite())
+                    throw new ArgumentException("Non-finite in CoordinateFrame.YAxis assignment");
+                m_yAxis = value;
+            }
+        }
+        /// <summary>Z axis of this coordinate frame, or Up in grid terms</summary>
+        public Vector3 ZAxis
+        {
+            get { return m_zAxis; }
+            set
+            {
+                if (!value.IsFinite())
+                    throw new ArgumentException("Non-finite in CoordinateFrame.ZAxis assignment");
+                m_zAxis = value;
+            }
+        }
+
+        protected Vector3 m_origin;
+        protected Vector3 m_xAxis;
+        protected Vector3 m_yAxis;
+        protected Vector3 m_zAxis;
+
+        #region Constructors
+
+        public CoordinateFrame(Vector3 origin)
+        {
+            m_origin = origin;
+            m_xAxis = X_AXIS;
+            m_yAxis = Y_AXIS;
+            m_zAxis = Z_AXIS;
+
+            if (!m_origin.IsFinite())
+                throw new ArgumentException("Non-finite in CoordinateFrame constructor");
+        }
+
+        public CoordinateFrame(Vector3 origin, Vector3 direction)
+        {
+            m_origin = origin;
+            LookDirection(direction);
+
+            if (!IsFinite())
+                throw new ArgumentException("Non-finite in CoordinateFrame constructor");
+        }
+
+        public CoordinateFrame(Vector3 origin, Vector3 xAxis, Vector3 yAxis, Vector3 zAxis)
+        {
+            m_origin = origin;
+            m_xAxis = xAxis;
+            m_yAxis = yAxis;
+            m_zAxis = zAxis;
+
+            if (!IsFinite())
+                throw new ArgumentException("Non-finite in CoordinateFrame constructor");
+        }
+
+        public CoordinateFrame(Vector3 origin, Matrix4 rotation)
+        {
+            m_origin = origin;
+            m_xAxis = rotation.AtAxis;
+            m_yAxis = rotation.LeftAxis;
+            m_zAxis = rotation.UpAxis;
+
+            if (!IsFinite())
+                throw new ArgumentException("Non-finite in CoordinateFrame constructor");
+        }
+
+        public CoordinateFrame(Vector3 origin, Quaternion rotation)
+        {
+            Matrix4 m = Matrix4.CreateFromQuaternion(rotation);
+
+            m_origin = origin;
+            m_xAxis = m.AtAxis;
+            m_yAxis = m.LeftAxis;
+            m_zAxis = m.UpAxis;
+
+            if (!IsFinite())
+                throw new ArgumentException("Non-finite in CoordinateFrame constructor");
+        }
+
+        #endregion Constructors
+
+        #region Public Methods
+
+        public void ResetAxes()
+        {
+            m_xAxis = X_AXIS;
+            m_yAxis = Y_AXIS;
+            m_zAxis = Z_AXIS;
+        }
+
+        public void Rotate(float angle, Vector3 rotationAxis)
+        {
+            Quaternion q = Quaternion.CreateFromAxisAngle(rotationAxis, angle);
+            Rotate(q);
+        }
+
+        public void Rotate(Quaternion q)
+        {
+            Matrix4 m = Matrix4.CreateFromQuaternion(q);
+            Rotate(m);
+        }
+
+        public void Rotate(Matrix4 m)
+        {
+            m_xAxis = Vector3.Transform(m_xAxis, m);
+            m_yAxis = Vector3.Transform(m_yAxis, m);
+
+            Orthonormalize();
+
+            if (!IsFinite())
+                throw new Exception("Non-finite in CoordinateFrame.Rotate()");
+        }
+
+        public void Roll(float angle)
+        {
+            Quaternion q = Quaternion.CreateFromAxisAngle(m_xAxis, angle);
+            Matrix4 m = Matrix4.CreateFromQuaternion(q);
+            Rotate(m);
+
+            if (!m_yAxis.IsFinite() || !m_zAxis.IsFinite())
+                throw new Exception("Non-finite in CoordinateFrame.Roll()");
+        }
+
+        public void Pitch(float angle)
+        {
+            Quaternion q = Quaternion.CreateFromAxisAngle(m_yAxis, angle);
+            Matrix4 m = Matrix4.CreateFromQuaternion(q);
+            Rotate(m);
+
+            if (!m_xAxis.IsFinite() || !m_zAxis.IsFinite())
+                throw new Exception("Non-finite in CoordinateFrame.Pitch()");
+        }
+
+        public void Yaw(float angle)
+        {
+            Quaternion q = Quaternion.CreateFromAxisAngle(m_zAxis, angle);
+            Matrix4 m = Matrix4.CreateFromQuaternion(q);
+            Rotate(m);
+
+            if (!m_xAxis.IsFinite() || !m_yAxis.IsFinite())
+                throw new Exception("Non-finite in CoordinateFrame.Yaw()");
+        }
+
+        public void LookDirection(Vector3 at)
+        {
+            LookDirection(at, Z_AXIS);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="at">Looking direction, must be a normalized vector</param>
+        /// <param name="upDirection">Up direction, must be a normalized vector</param>
+        public void LookDirection(Vector3 at, Vector3 upDirection)
+        {
+            // The two parameters cannot be parallel
+            Vector3 left = Vector3.Cross(upDirection, at);
+            if (left == Vector3.Zero)
+            {
+                // Prevent left from being zero
+                at.X += 0.01f;
+                at.Normalize();
+                left = Vector3.Cross(upDirection, at);
+            }
+            left.Normalize();
+
+            m_xAxis = at;
+            m_yAxis = left;
+            m_zAxis = Vector3.Cross(at, left);
+        }
+
+        /// <summary>
+        /// Align the coordinate frame X and Y axis with a given rotation
+        /// around the Z axis in radians
+        /// </summary>
+        /// <param name="heading">Absolute rotation around the Z axis in
+        /// radians</param>
+        public void LookDirection(double heading)
+        {
+            m_yAxis.X = (float)Math.Cos(heading);
+            m_yAxis.Y = (float)Math.Sin(heading);
+            m_xAxis.X = (float)-Math.Sin(heading);
+            m_xAxis.Y = (float)Math.Cos(heading);
+        }
+
+        public void LookAt(Vector3 origin, Vector3 target)
+        {
+            LookAt(origin, target, new Vector3(0f, 0f, 1f));
+        }
+
+        public void LookAt(Vector3 origin, Vector3 target, Vector3 upDirection)
+        {
+            m_origin = origin;
+            var at = new Vector3(target - origin);
+            at.Normalize();
+
+            LookDirection(at, upDirection);
+        }
+
+        #endregion Public Methods
+
+        protected bool IsFinite()
+        {
+            if (m_xAxis.IsFinite () && m_yAxis.IsFinite () && m_zAxis.IsFinite ())
+                return true;
+            return false;
+        }
+
+        protected void Orthonormalize()
+        {
+            // Make sure the axis are orthagonal and normalized
+            m_xAxis.Normalize();
+            m_yAxis -= m_xAxis * (m_xAxis * m_yAxis);
+            m_yAxis.Normalize();
+            m_zAxis = Vector3.Cross(m_xAxis, m_yAxis);
+        }
+    }
+}
